@@ -1,0 +1,218 @@
+---
+title: "NYPD_Shooting_Report"
+author: "ym.deng"
+date: '2023-07-09'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import Library
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(gridExtra)
+```
+
+## Load Data
+
+```{r echo=FALSE}
+df = read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+```
+## Understand the Data
+```{r echo=FALSE}
+head(df)
+```
+Key Questions: 
+* Which BORO has most shooting incidents? and how much of them are murders? 
+* How is the incidents related to age, sex, race? 
+* what time of day will be incident be more likely to happen? 
+
+Prediction Requirements:
+* Given the data, what is the probability of that the incident being a murder? 
+
+The features we need : 
+INCIDENT_KEY, OCCUR_DATE, OCCUR_TIME, BORO, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE, STATISTICAL_MURDER_FLAG
+
+## Select the Required Data.
+```{r echo=FALSE}
+df_new = df %>% select(INCIDENT_KEY, 
+                   OCCUR_DATE,
+                   OCCUR_TIME,
+                   BORO, 
+                   PERP_AGE_GROUP,
+                   PERP_SEX,
+                   PERP_RACE,
+                   VIC_AGE_GROUP,
+                   VIC_SEX,
+                   VIC_RACE,
+                   STATISTICAL_MURDER_FLAG)
+df_new
+```
+
+As we can see from the dataset that there are a lot of missing values for PERP_AGE_GROUP, PERP_SEX, PERP_RACE
+
+
+# Find missing and extreme Values 
+```{r}
+unique_perp_age = unique(df_new$PERP_AGE_GROUP)
+unique_perp_sex = unique(df_new$PERP_SEX)
+unique_perp_race = unique(df_new$PERP_RACE)
+unique_vic_age = unique(df_new$VIC_AGE_GROUP)
+unique_vic_sex = unique(df_new$VIC_SEX)
+unique_vic_race = unique(df_new$VIC_RACE)
+```
+We can find out the missing the extream values that we need tidy afterwards. 
+
+- Extreme values in age_group such as : 940, 224, 1020, that must be the typo issue, we need to delete them 
+- Missing values with nameL: U, null, UNKNOWN, we need to use 'U' for all of them 
+
+Data types that need to be changed:
+- INCIDENT_KEY -> string
+- BORO -> factor
+- PERP_AGE_GROUP, VIC_AGE_GROUP -> factor
+- PERP_SEX, VIC_SEX -> factor
+- PERP_RACE, VIC_RACE -> factor
+
+## Tidy and Transform Data
+```{r}
+df_new = df_new %>% 
+  replace_na(list(PERP_AGE_GROUP = "U", PERP_SEX = "U", PERP_RACE = "U"))
+
+df_new = subset(df_new, PERP_AGE_GROUP!="1020" & PERP_AGE_GROUP!="224" & PERP_AGE_GROUP!="940")
+
+df_new$PERP_AGE_GROUP = recode(df_new$PERP_AGE_GROUP, UNKNOWN = "U")
+df_new$PERP_SEX = recode(df_new$PERP_SEX, U = "U")
+df_new$PERP_RACE = recode(df_new$PERP_RACE, UNKNOWN = "U")
+df_new$VIC_SEX   = recode(df_new$VIC_SEX, U = "U")
+df_new$VIC_RACE   = recode(df_new$VIC_RACE, UNKNOWN = "U")
+
+df_new$INCIDENT_KEY = as.character(df_new$INCIDENT_KEY)
+df_new$BORO = as.factor(df_new$BORO)
+df_new$PERP_AGE_GROUP = as.factor(df_new$PERP_AGE_GROUP)
+df_new$PERP_SEX = as.factor(df_new$PERP_SEX)
+df_new$PERP_RACE = as.factor(df_new$PERP_RACE)
+df_new$VIC_AGE_GROUP = as.factor(df_new$VIC_AGE_GROUP)
+df_new$VIC_SEX = as.factor(df_new$VIC_SEX)
+df_new$VIC_RACE = as.factor(df_new$VIC_RACE)
+```
+
+## Visualization 
+
+Let's Review our previous questions: 
+1. Which BORO has most shooting incidents? and how much of them are murders? 
+2. How is the incidents related to age, sex, race? 
+3. what time of day will be incident be more likely to happen? 
+
+```{r}
+shooting_incidents_boro <- ggplot(df_new, aes(x = BORO, fill = STATISTICAL_MURDER_FLAG)) +
+  geom_bar() +
+  labs(title = "Shooting Incidents by Boro",
+       x = "Boro of New York City",
+       y = "Count of Incidents") +
+  scale_fill_discrete(name = "Murder", labels = c("No", "Yes"))
+shooting_incidents_boro
+```
+
+```{r}
+df_filtered <- df_new %>% 
+  filter(PERP_AGE_GROUP != "U" & PERP_AGE_GROUP != "(null)",
+         PERP_SEX != "U" & PERP_SEX != "(null)",
+         PERP_RACE != "U" & PERP_RACE != "(null)")
+# Create a bar plot of incidents by age group
+age_plot <- ggplot(df_filtered, aes(x = PERP_AGE_GROUP)) +
+  geom_bar(fill = "blue") +
+  labs(x = "Age Group", y = "Incidents Count", title = "Incidents by Per Age Group")
+
+# Create a bar plot of incidents by sex
+sex_plot <- ggplot(df_filtered, aes(x = PERP_SEX)) +
+  geom_bar(fill = "green") +
+  labs(x = "Sex", y = "Incidents Count", title = "Incidents by Per Sex")
+
+# Create a bar plot of incidents by race
+race_plot <- ggplot(df_filtered, aes(x = PERP_RACE)) +
+  geom_bar(fill = "red") +
+  labs(x = "Race", y = "Incidents Count", title = "Incidents by Per Race")
+
+# Combine the plots into a grid
+grid_plot <- gridExtra::grid.arrange(age_plot, sex_plot, race_plot, ncol = 1)
+
+# Display the combined plot
+grid_plot
+
+```
+```{r}
+df_filtered <- df_new %>% 
+  filter(VIC_AGE_GROUP != "U" & VIC_AGE_GROUP != "(null)" & VIC_AGE_GROUP != "UNKNOWN" & VIC_AGE_GROUP != 1022,
+         VIC_SEX != "U" & VIC_SEX != "(null)",
+         VIC_RACE != "U" & VIC_RACE != "(null)")
+
+vage_plot <- ggplot(df_filtered, aes(x = VIC_AGE_GROUP)) +
+  geom_bar(fill = "blue") +
+  labs(x = "Age Group", y = "Incidents Count", title = "Incidents by Vic Age Group")
+
+# Create a bar plot of incidents by sex
+vsex_plot <- ggplot(df_filtered, aes(x = VIC_SEX)) +
+  geom_bar(fill = "green") +
+  labs(x = "Sex", y = "Incidents Count", title = "Incidents by Vic Sex")
+
+# Create a bar plot of incidents by race
+vrace_plot <- ggplot(df_filtered, aes(x = VIC_RACE)) +
+  geom_bar(fill = "red") +
+  labs(x = "Race", y = "Incidents Count", title = "Incidents by Vic Race")
+
+# Combine the plots into a grid
+grid_plot <- gridExtra::grid.arrange(vage_plot, vsex_plot, vrace_plot, ncol = 1)
+```
+
+```{r}
+df_new$OCCUR_DAY = mdy(df_new$OCCUR_DATE)
+df_new$OCCUR_DAY = wday(df_new$OCCUR_DAY, label = TRUE)
+df_new$OCCUR_HOUR = hour(hms(as.character(df_new$OCCUR_TIME)))
+
+df_new_hour = df_new %>%
+  group_by(OCCUR_HOUR) %>%
+  count()
+
+```
+
+
+```{r}
+g <- ggplot(df_new_hour, aes(x = OCCUR_HOUR, y = n)) +
+  geom_line() +
+  labs(title = "Which time are most dangerous?",
+       x = "Incident Occurence Hour",
+       y = "Count of Incidents") +
+  theme_minimal()
+g
+```
+### Model Prediction 
+
+```{r}
+glm.fit <- glm(STATISTICAL_MURDER_FLAG ~ PERP_RACE + PERP_SEX + PERP_AGE_GROUP + OCCUR_HOUR + OCCUR_DAY, data = df_new, family = binomial)
+summary(glm.fit)
+```
+
+## Intepreating the Result 
+
+- PERP_AGE_GROUP45-64: This age group has a coefficient of 3.085242. It indicates that individuals in the age group 45-64 have a significantly higher log-odds of the STATISTICAL_MURDER_FLAG compared to the reference level (usually the youngest age group). The associated p-value (< 2e-16) suggests a strong statistical significance.
+
+- PERP_AGE_GROUP65+: This age group has a coefficient of 3.249051. It indicates that individuals aged 65 and older have a significantly higher log-odds of the STATISTICAL_MURDER_FLAG compared to the reference level. The associated p-value (< 2e-16) indicates strong statistical significance.
+
+- PERP_SEXF: This coefficient is -2.463202. It suggests that female perpetrators have a significantly lower log-odds of the STATISTICAL_MURDER_FLAG compared to male perpetrators (reference level: PERP_SEXM). The associated p-value (< 2e-16) indicates strong statistical significance.
+
+- PERP_SEXM: This coefficient is -2.620462. It suggests that male perpetrators (reference level) have a significantly higher log-odds of the STATISTICAL_MURDER_FLAG compared to female perpetrators. The associated p-value (< 2e-16) indicates strong statistical significance.
+
+
+## Identify Bias
+
+1. Reporting Bias: The dataset may not capture all crimes that occur, as some incidents may go unreported or underreported. This can introduce bias in the representation of certain types of crimes or demographics.
+
+2. Missing Data Bias: Missing or incomplete data can introduce bias if the missingness is related to certain variables or demographics.
+
+3. Human Bias: The dataset may reflect underlying Human biases, such as racial profiling which can influence the patterns of reported crimes and the representation of different groups.
